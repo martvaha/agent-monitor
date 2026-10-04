@@ -1,5 +1,5 @@
 import Foundation
-import ClaudeMonitorCore
+import AgentMonitorCore
 
 private struct BridgeConfig: Codable {
     let originalStatusLineJSON: Data?
@@ -62,13 +62,13 @@ private func install() throws {
     let current = settings["statusLine"] as? [String: Any]
     let currentCommand = current?["command"] as? String
 
-    if currentCommand?.contains("ClaudeMonitorBridge") == true {
+    if currentCommand.map(isMonitorBridge) == true {
         var replacement = current ?? [:]
         replacement["type"] = "command"
         replacement["command"] = shellQuote(executable)
         settings["statusLine"] = replacement
         try writeJSONObject(settings, to: settingsURL)
-        print("Updated Claude Monitor status-line bridge path.")
+        print("Updated Agent Monitor status-line bridge path.")
         return
     }
 
@@ -89,15 +89,15 @@ private func install() throws {
     replacement["command"] = shellQuote(executable)
     settings["statusLine"] = replacement
     try writeJSONObject(settings, to: settingsURL)
-    print("Installed Claude Monitor status-line bridge in \(settingsURL.path).")
+    print("Installed Agent Monitor status-line bridge in \(settingsURL.path).")
 }
 
 private func uninstall() throws {
     var settings = try readSettings()
     guard let current = settings["statusLine"] as? [String: Any],
           let command = current["command"] as? String,
-          command.contains("ClaudeMonitorBridge") else {
-        print("Claude Monitor does not own the current status-line setting; nothing changed.")
+          isMonitorBridge(command) else {
+        print("Agent Monitor does not own the current status-line setting; nothing changed.")
         return
     }
 
@@ -109,7 +109,11 @@ private func uninstall() throws {
         settings.removeValue(forKey: "statusLine")
     }
     try writeJSONObject(settings, to: settingsURL)
-    print("Removed Claude Monitor status-line bridge.")
+    print("Removed Agent Monitor status-line bridge.")
+}
+
+private func isMonitorBridge(_ command: String) -> Bool {
+    command.contains("AgentMonitorBridge") || command.contains("ClaudeMonitorBridge")
 }
 
 private func forwardToOriginal(_ command: String, input: Data) -> Int32 {
@@ -127,7 +131,7 @@ private func forwardToOriginal(_ command: String, input: Data) -> Int32 {
         process.waitUntilExit()
         return process.terminationStatus
     } catch {
-        FileHandle.standardError.write(Data("Claude Monitor could not run the previous status line: \(error)\n".utf8))
+        FileHandle.standardError.write(Data("Agent Monitor could not run the previous status line: \(error)\n".utf8))
         return 1
     }
 }
@@ -150,7 +154,7 @@ do {
     } catch {
         usage = nil
         if ProcessInfo.processInfo.environment["CLAUDEMON_DEBUG"] != nil {
-            FileHandle.standardError.write(Data("Claude Monitor cache update skipped: \(error)\n".utf8))
+            FileHandle.standardError.write(Data("Agent Monitor cache update skipped: \(error)\n".utf8))
         }
     }
 
@@ -165,6 +169,6 @@ do {
         print("[Claude] " + parts.joined(separator: "  "))
     }
 } catch {
-    FileHandle.standardError.write(Data("Claude Monitor status-line bridge: \(error)\n".utf8))
+    FileHandle.standardError.write(Data("Agent Monitor status-line bridge: \(error)\n".utf8))
     exit(1)
 }

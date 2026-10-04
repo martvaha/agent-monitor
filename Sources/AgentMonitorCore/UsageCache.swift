@@ -14,6 +14,7 @@ public enum UsageCache {
     }
 
     public static var directoryURL: URL {
+        // Keep the existing cache and bridge backup available after the rename.
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/ClaudeMonitor", isDirectory: true)
     }

@@ -1,4 +1,6 @@
 .build/
+AgentMonitor.app/
 ClaudeMonitor.app/
 .DS_Store
 .swiftpm/
+.local-signing/

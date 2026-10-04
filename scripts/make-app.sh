@@ -1,6 +1,6 @@
 #!/bin/bash
-# Builds ClaudeMonitor in release mode and assembles a double-clickable
-# .app bundle (menu-bar agent, no Dock icon). Output: ./ClaudeMonitor.app
+# Builds AgentMonitor in release mode and assembles a double-clickable
+# .app bundle (menu-bar agent, no Dock icon). Output: ./AgentMonitor.app
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -8,15 +8,15 @@ echo "Building release…"
 swift build -c release
 
 BIN_DIR="$(swift build -c release --show-bin-path)"
-BIN="$BIN_DIR/ClaudeMonitor"
-BRIDGE="$BIN_DIR/ClaudeMonitorBridge"
-APP="ClaudeMonitor.app"
+BIN="$BIN_DIR/AgentMonitor"
+BRIDGE="$BIN_DIR/AgentMonitorBridge"
+APP="AgentMonitor.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 mkdir -p "$APP/Contents/Helpers"
 
-cp "$BIN" "$APP/Contents/MacOS/ClaudeMonitor"
-cp "$BRIDGE" "$APP/Contents/Helpers/ClaudeMonitorBridge"
+cp "$BIN" "$APP/Contents/MacOS/AgentMonitor"
+cp "$BRIDGE" "$APP/Contents/Helpers/AgentMonitorBridge"
 
 # Generate the .icns app icon from Resources/AppIcon.png (1024×1024 source).
 if [[ -f "Resources/AppIcon.png" ]]; then
@@ -38,38 +38,43 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key><string>ClaudeMonitor</string>
-    <key>CFBundleDisplayName</key><string>Claude Monitor</string>
+    <key>CFBundleName</key><string>AgentMonitor</string>
+    <key>CFBundleDisplayName</key><string>Agent Monitor</string>
     <key>CFBundleIdentifier</key><string>com.local.claudemonitor</string>
-    <key>CFBundleExecutable</key><string>ClaudeMonitor</string>
+    <key>CFBundleExecutable</key><string>AgentMonitor</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>2.0</string>
-    <key>CFBundleVersion</key><string>2</string>
-    <key>LSMinimumSystemVersion</key><string>14.0</string>
+    <key>CFBundleShortVersionString</key><string>2.1</string>
+    <key>CFBundleVersion</key><string>3</string>
+    <key>LSMinimumSystemVersion</key><string>27.0</string>
     <!-- Agent app: lives in the menu bar, no Dock icon. -->
     <key>LSUIElement</key><true/>
 </dict>
 </plist>
 PLIST
 
+echo "Signing app…"
+bash scripts/sign-app.sh "$APP"
+
 echo "Built $APP"
 
 # `make-app.sh --install` installs to ~/Applications (stable location for the
 # "Launch at login" toggle) and relaunches it.
 if [[ "${1:-}" == "--install" ]]; then
+    pkill -f "AgentMonitor.app/Contents/MacOS/AgentMonitor" 2>/dev/null || true
     pkill -f "ClaudeMonitor.app/Contents/MacOS/ClaudeMonitor" 2>/dev/null || true
     sleep 1
-    DEST="$HOME/Applications/ClaudeMonitor.app"
+    DEST="$HOME/Applications/AgentMonitor.app"
     mkdir -p "$HOME/Applications"
     rm -rf "$DEST"
     cp -R "$APP" "$DEST"
-    "$DEST/Contents/Helpers/ClaudeMonitorBridge" --install
+    "$DEST/Contents/Helpers/AgentMonitorBridge" --install
     open "$DEST"
     echo "Installed to $DEST and launched."
     echo "Open the menu-bar popover and flip 'Launch at login' once to start at boot."
 else
     echo "Run it:  open $APP"
-    echo "Enable live updates:  $APP/Contents/Helpers/ClaudeMonitorBridge --install"
+    echo "Uses your existing Claude Code sign-in, including Zed sessions."
+    echo "Optional terminal status-line updates:  $APP/Contents/Helpers/AgentMonitorBridge --install"
     echo "Install + start at login:  ./scripts/make-app.sh --install"
 fi

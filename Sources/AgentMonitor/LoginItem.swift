@@ -19,7 +19,7 @@ final class LoginItem: ObservableObject {
             else  { try SMAppService.mainApp.unregister() }
         } catch {
             #if DEBUG
-            FileHandle.standardError.write(Data("[ClaudeMonitor] login-item toggle failed: \(error)\n".utf8))
+            FileHandle.standardError.write(Data("[AgentMonitor] login-item toggle failed: \(error)\n".utf8))
             #endif
         }
         refresh()

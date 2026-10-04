@@ -1,6 +1,6 @@
 import Foundation
 import Combine
-import ClaudeMonitorCore
+import AgentMonitorCore
 
 /// Reads Codex usage from its rollout logs at launch and when the popover opens.
 /// A file fingerprint makes repeated opens free when the logs have not changed.

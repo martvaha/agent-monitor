@@ -2,24 +2,24 @@
 import PackageDescription
 
 let package = Package(
-    name: "ClaudeMonitor",
-    platforms: [.macOS(.v14)],
+    name: "AgentMonitor",
+    platforms: [.macOS("27.0")],
     targets: [
-        .target(name: "ClaudeMonitorCore"),
+        .target(name: "AgentMonitorCore"),
         .executableTarget(
-            name: "ClaudeMonitor",
-            dependencies: ["ClaudeMonitorCore"]
+            name: "AgentMonitor",
+            dependencies: ["AgentMonitorCore"]
         ),
         .executableTarget(
-            name: "ClaudeMonitorBridge",
-            dependencies: ["ClaudeMonitorCore"]
+            name: "AgentMonitorBridge",
+            dependencies: ["AgentMonitorCore"]
         ),
         // Assertion-based checks. (Full Xcode would allow an XCTest target;
         // Command Line Tools ship neither XCTest nor swift-testing, so this runs
         // as a plain executable: `swift run MonitorCheck`.)
         .executableTarget(
             name: "MonitorCheck",
-            dependencies: ["ClaudeMonitorCore"]
+            dependencies: ["AgentMonitorCore"]
         ),
     ],
     swiftLanguageModes: [.v5]

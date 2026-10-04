@@ -1,5 +1,5 @@
 import Foundation
-import ClaudeMonitorCore
+import AgentMonitorCore
 
 if CommandLine.arguments.contains("codex-live") {
     if let usage = CodexUsageReader.read() {
@@ -41,7 +41,7 @@ do {
     check(usage?.observedAt == observed, "observation timestamp retained")
 
     let tempDirectory = FileManager.default.temporaryDirectory
-        .appendingPathComponent("claude-monitor-check-\(UUID().uuidString)", isDirectory: true)
+        .appendingPathComponent("agent-monitor-check-\(UUID().uuidString)", isDirectory: true)
     let cache = tempDirectory.appendingPathComponent("usage.json")
     if let usage { try UsageCache.write(usage, to: cache) }
     let roundTrip = try UsageCache.read(from: cache)
@@ -152,6 +152,8 @@ let unchangedScan = firstScan.flatMap { CodexUsageReader.scan(changedFrom: $0.fi
 check(unchangedScan == nil, "unchanged Codex files skip parsing")
 unsetenv("CODEX_SESSIONS_DIR")
 try? FileManager.default.removeItem(at: codexDir.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent())
+
+await checkOAuthUsage()
 
 print(failures == 0 ? "\nAll checks passed." : "\n\(failures) check(s) FAILED.")
 exit(failures == 0 ? 0 : 1)

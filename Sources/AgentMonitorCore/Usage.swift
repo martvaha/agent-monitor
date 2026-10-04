@@ -1,6 +1,6 @@
 import Foundation
 
-/// Account-wide Claude subscription limits reported with the latest local response.
+/// Account-wide Claude subscription limits from a response or usage request.
 public struct Usage: Equatable, Sendable {
     public let sessionPercent: Int
     public let sessionResetAt: Date
