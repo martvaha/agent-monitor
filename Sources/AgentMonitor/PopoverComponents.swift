@@ -24,21 +24,25 @@ struct LimitWindow: Identifiable {
     var id: String { title }
 }
 
+/// An elapsed window shows as empty with no countdown; the next one starts with use.
 extension Usage {
-    var limitWindows: [LimitWindow] {
-        var windows = [LimitWindow(title: "Short window (5h)", percent: sessionPercent, resetAt: sessionResetAt)]
-        if let weekPercent {
-            windows.append(LimitWindow(title: "Weekly", percent: weekPercent, resetAt: weekResetAt))
+    func limitWindows(at now: Date) -> [LimitWindow] {
+        var windows = [LimitWindow(title: "Short window (5h)", percent: sessionPercent(at: now),
+                                   resetAt: sessionResetAt > now ? sessionResetAt : nil)]
+        if let weekPercent = weekPercent(at: now) {
+            windows.append(LimitWindow(title: "Weekly", percent: weekPercent,
+                                       resetAt: weekResetAt.flatMap { $0 > now ? $0 : nil }))
         }
         return windows
     }
 }
 
 extension CodexUsage {
-    var limitWindows: [LimitWindow] {
+    func limitWindows(at now: Date) -> [LimitWindow] {
         windows.map { window in
             let title = window.label == "5-hour" ? "Short window (5h)" : window.label
-            return LimitWindow(title: title, percent: window.usedPercent, resetAt: window.resetsAt)
+            return LimitWindow(title: title, percent: window.usedPercent(at: now),
+                               resetAt: window.isElapsed(at: now) ? nil : window.resetsAt)
         }
     }
 

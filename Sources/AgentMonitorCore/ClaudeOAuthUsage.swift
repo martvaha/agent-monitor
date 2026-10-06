@@ -33,6 +33,14 @@ public struct ClaudeOAuthCredentials: Sendable {
     public static func readFromKeychain(allowInteraction: Bool, now: Date = Date()) throws -> Self {
         keychainLock.lock()
         defer { keychainLock.unlock() }
+        // Claude Code rewrites this item with /usr/bin/security on every token
+        // renewal, which resets its partition list to Apple tools and drops any
+        // Always Allow granted to this app. Reading through the same tool matches
+        // the item's access list without a prompt. A locked Keychain would make
+        // the tool ask for a password, so background reads skip it then.
+        if allowInteraction || loginKeychainIsUnlocked(), let data = readWithSecurityTool() {
+            return try decode(data, now: now)
+        }
         // LAContext controls the Data Protection keychain, but Claude Code's
         // login Keychain item also needs the legacy interaction switch.
         let previousInteraction = try setLegacyInteractionAllowed(allowInteraction)
@@ -56,6 +64,52 @@ public struct ClaudeOAuthCredentials: Sendable {
             throw ClaudeUsageError.keychainUnavailable
         }
         return try decode(data, now: now)
+    }
+
+    /// Returns nil when the tool fails, so the caller falls back to SecItem and
+    /// reports a precise error. The secret only travels through a private pipe.
+    private static func readWithSecurityTool() -> Data? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        process.arguments = ["find-generic-password", "-s", "Claude Code-credentials", "-w"]
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        process.standardInput = FileHandle.nullDevice
+        do { try process.run() } catch { return nil }
+        // Never let an unexpected dialog block the read indefinitely.
+        DispatchQueue.global().asyncAfter(deadline: .now() + 15) {
+            if process.isRunning { process.terminate() }
+        }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationReason == .exit, process.terminationStatus == 0 else { return nil }
+        let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        // The tool prints non-printable secrets as hex instead of raw bytes.
+        if !text.hasPrefix("{"), let decoded = hexData(text) { return decoded }
+        return Data(text.utf8)
+    }
+
+    private static func hexData(_ text: String) -> Data? {
+        let digits = Array(text.utf8)
+        guard !digits.isEmpty, digits.count.isMultiple(of: 2) else { return nil }
+        var data = Data(capacity: digits.count / 2)
+        for index in stride(from: 0, to: digits.count, by: 2) {
+            guard let byte = UInt8(String(decoding: digits[index...index + 1], as: UTF8.self), radix: 16) else {
+                return nil
+            }
+            data.append(byte)
+        }
+        return data
+    }
+
+    @diagnose(DeprecatedDeclaration, as: ignored)
+    private static func loginKeychainIsUnlocked() -> Bool {
+        var keychain: SecKeychain?
+        var status: SecKeychainStatus = 0
+        guard SecKeychainCopyDefault(&keychain) == errSecSuccess, let keychain,
+              SecKeychainGetStatus(keychain, &status) == errSecSuccess else { return false }
+        return status & SecKeychainStatus(kSecUnlockStateStatus) != 0
     }
 
     /// SecKeychain is deprecated, but nothing replaces its interaction switch

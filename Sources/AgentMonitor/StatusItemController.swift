@@ -17,6 +17,7 @@ final class StatusItemController: NSObject, @MainActor NSStatusItemExpandedInter
     private var panelTop: CGFloat?
     private var pendingSize: CGSize?
     private var resizeScheduled = false
+    private var resetTimer: Timer?
 
     init(store: UsageStore, codexStore: CodexStore) {
         self.store = store
@@ -30,10 +31,13 @@ final class StatusItemController: NSObject, @MainActor NSStatusItemExpandedInter
             .sink { [weak self] _ in self?.close() }
             .store(in: &cancellables)
 
-        // The label redraws on new usage or any style change in Settings.
+        // The label redraws on new usage, any style change in Settings, and on wake,
+        // since a window may have reset while the Mac slept.
         store.$usage.map { _ in () }
             .merge(with: codexStore.$usage.map { _ in () },
-                   NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).map { _ in () })
+                   NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).map { _ in () },
+                   NSWorkspace.shared.notificationCenter
+                       .publisher(for: NSWorkspace.didWakeNotification).map { _ in () })
             .receive(on: RunLoop.main)
             .sink { [weak self] in self?.updateLabel() }
             .store(in: &cancellables)
@@ -46,6 +50,23 @@ final class StatusItemController: NSObject, @MainActor NSStatusItemExpandedInter
         let groups = MenuBarIcon.groups(claude: store.usage, codex: codexStore.usage, style: style)
         button.image = MenuBarIcon.image(groups, style: style)
         button.setAccessibilityLabel(MenuBarIcon.summary(groups))
+        scheduleResetRedraw()
+    }
+
+    /// Cached usage outlives its windows, so redraw when the next one resets to show
+    /// it empty, without waiting for the provider to report again.
+    private func scheduleResetRedraw() {
+        resetTimer?.invalidate()
+        resetTimer = nil
+        let now = Date()
+        guard let next = [store.usage?.nextReset(after: now), codexStore.usage?.nextReset(after: now)]
+            .compactMap({ $0 }).min() else { return }
+        let timer = Timer(fire: next.addingTimeInterval(1), interval: 0, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.updateLabel() }
+        }
+        timer.tolerance = 30
+        RunLoop.main.add(timer, forMode: .common)
+        resetTimer = timer
     }
 
     func statusItem(_ statusItem: NSStatusItem, didBegin session: NSStatusItemExpandedInterfaceSession) {
@@ -77,8 +98,8 @@ final class StatusItemController: NSObject, @MainActor NSStatusItemExpandedInter
         let visible = (buttonWindow.screen ?? NSScreen.main)?.visibleFrame ?? .zero
         let x = max(visible.minX + 8, min(anchor.minX, visible.maxX - size.width - 8))
         // Golden Gate's status items share a menu-bar window. Anchor to the
-        // actual button bounds, with no extra gap below the menu bar.
-        let top = anchor.minY
+        // actual button bounds, leaving a small gap like the system panels.
+        let top = anchor.minY - 6
         panelTop = top
         panel.setFrame(NSRect(x: x, y: top - size.height, width: size.width, height: size.height),
                        display: true)

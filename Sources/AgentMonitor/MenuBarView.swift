@@ -66,23 +66,26 @@ struct MenuBarView: View {
 
     // MARK: Main pane
 
+    /// Re-evaluated periodically so a window that resets while open empties on time.
     private var main: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header
-                .padding(.horizontal, 16)
-                .padding(.top, 14)
-                .padding(.bottom, 10)
-            Divider().padding(.horizontal, 16)
-            claudeSection
-                .padding(16)
-            if let codex = codexStore.usage, showsCodex {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            VStack(alignment: .leading, spacing: 0) {
+                header
+                    .padding(.horizontal, 16)
+                    .padding(.top, 14)
+                    .padding(.bottom, 10)
                 Divider().padding(.horizontal, 16)
-                providerSection(.codex, plan: codex.planLabel, windows: codex.limitWindows) {}
+                claudeSection(now: context.date)
                     .padding(16)
+                if let codex = codexStore.usage, showsCodex {
+                    Divider().padding(.horizontal, 16)
+                    providerSection(.codex, plan: codex.planLabel, windows: codex.limitWindows(at: context.date)) {}
+                        .padding(16)
+                }
+                Divider().padding(.horizontal, 16)
+                commands
+                    .padding(6)
             }
-            Divider().padding(.horizontal, 16)
-            commands
-                .padding(6)
         }
     }
 
@@ -124,9 +127,9 @@ struct MenuBarView: View {
     }
 
     @ViewBuilder
-    private var claudeSection: some View {
+    private func claudeSection(now: Date) -> some View {
         if let usage = store.usage {
-            providerSection(.claude, plan: nil, windows: usage.limitWindows) {
+            providerSection(.claude, plan: nil, windows: usage.limitWindows(at: now)) {
                 claudeStatus
             }
         } else {

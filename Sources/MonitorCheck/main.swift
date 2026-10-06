@@ -146,6 +146,20 @@ if let fiveHourWindow = codex?.windows.first {
 }
 check(CodexWindow(usedPercent: 20, resetsAt: Date(), windowMinutes: 43800).label == "Monthly",
       "codex 43800-minute window labelled Monthly")
+let elapsedAt = Date()
+let elapsedCodex = CodexUsage(windows: [
+    CodexWindow(usedPercent: 56, resetsAt: elapsedAt.addingTimeInterval(-60), windowMinutes: 300),
+    CodexWindow(usedPercent: 18, resetsAt: elapsedAt.addingTimeInterval(86_400), windowMinutes: 10080),
+], observedAt: elapsedAt.addingTimeInterval(-36_000))
+check(elapsedCodex.windows[0].usedPercent(at: elapsedAt) == 0, "elapsed Codex window reads as empty")
+check(elapsedCodex.windows[1].usedPercent(at: elapsedAt) == 18, "pending Codex window keeps its usage")
+check(elapsedCodex.nextReset(after: elapsedAt) == elapsedCodex.windows[1].resetsAt,
+      "Codex next reset skips elapsed windows")
+let elapsedClaude = Usage(sessionPercent: 59, sessionResetAt: elapsedAt.addingTimeInterval(-60),
+                          weekPercent: 3, weekResetAt: elapsedAt.addingTimeInterval(86_400))
+check(elapsedClaude.sessionPercent(at: elapsedAt) == 0 && elapsedClaude.weekPercent(at: elapsedAt) == 3,
+      "elapsed Claude session reads as empty, weekly unchanged")
+
 let firstScan = CodexUsageReader.scan()
 check(firstScan?.usage == codex, "Codex scan returns the parsed usage")
 let unchangedScan = firstScan.flatMap { CodexUsageReader.scan(changedFrom: $0.fingerprint) }

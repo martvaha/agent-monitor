@@ -10,8 +10,9 @@ struct ProviderDetailsView: View {
     let color: NSColor
     let back: () -> Void
 
-    private var windows: [LimitWindow] {
-        provider == .claude ? store.usage?.limitWindows ?? [] : codexStore.usage?.limitWindows ?? []
+    private func windows(at now: Date) -> [LimitWindow] {
+        provider == .claude ? store.usage?.limitWindows(at: now) ?? []
+                            : codexStore.usage?.limitWindows(at: now) ?? []
     }
 
     private var lastSync: Date? { provider == .claude ? store.lastUpdated : codexStore.lastUpdated }
@@ -43,6 +44,7 @@ struct ProviderDetailsView: View {
     private func limits(now: Date) -> some View {
         DetailSection(title: "Limits",
                       footnote: provider == .claude ? "Model-specific limits are not reported." : nil) {
+            let windows = windows(at: now)
             if windows.isEmpty {
                 DetailRow("Status", "Waiting for usage")
             }

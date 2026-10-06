@@ -25,6 +25,12 @@ public struct CodexWindow: Equatable, Sendable {
         default:              return "Monthly"
         }
     }
+
+    /// Logs only arrive with activity, so a snapshot outlives its window. Once the
+    /// reset has passed the window is empty until Codex reports again.
+    public func isElapsed(at now: Date) -> Bool { resetsAt <= now }
+
+    public func usedPercent(at now: Date) -> Int { isElapsed(at: now) ? 0 : usedPercent }
 }
 
 /// The freshest account-wide Codex usage snapshot read from the CLI's rollout logs.
@@ -38,5 +44,10 @@ public struct CodexUsage: Equatable, Sendable {
         self.windows = windows.sorted { $0.windowMinutes < $1.windowMinutes }
         self.planType = planType
         self.observedAt = observedAt
+    }
+
+    /// The earliest reset still ahead, when the displayed usage next changes on its own.
+    public func nextReset(after now: Date) -> Date? {
+        windows.map(\.resetsAt).filter { $0 > now }.min()
     }
 }

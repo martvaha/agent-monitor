@@ -42,16 +42,17 @@ struct MenuBarIcon: View {
 
     static let warningColor = NSColor(srgbRed: 0.96, green: 0.65, blue: 0.14, alpha: 1)
 
-    static func groups(claude: Usage?, codex: CodexUsage?, style: MenuBarStyle) -> [Group] {
+    static func groups(claude: Usage?, codex: CodexUsage?, style: MenuBarStyle,
+                       now: Date = Date()) -> [Group] {
         let claudeGroup = Group(name: "Claude", logo: .anthropic, color: style.claudeColor.nsColor,
-                                short: claude?.sessionPercent, weekly: claude?.weekPercent)
+                                short: claude?.sessionPercent(at: now), weekly: claude?.weekPercent(at: now))
         // Windows are shortest-first. A lone long window (e.g. monthly) fills the
         // lower bar and leaves the short-window bar unavailable.
         let windows = codex?.windows ?? []
         let short = windows.first.flatMap { $0.windowMinutes < 600 ? $0 : nil }
         let long = windows.last.flatMap { $0.windowMinutes >= 600 ? $0 : nil }
         let codexGroup = Group(name: "Codex", logo: .openAI, color: style.codexColor.nsColor,
-                               short: short?.usedPercent, weekly: long?.usedPercent)
+                               short: short?.usedPercent(at: now), weekly: long?.usedPercent(at: now))
         switch style.providers {
         case .claude: return [claudeGroup]
         case .codex: return [codexGroup]

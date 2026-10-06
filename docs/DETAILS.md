@@ -3,6 +3,22 @@
 A small macOS menu-bar app for Claude subscription usage. It shows the rolling
 5-hour limit, weekly limit, and live reset countdowns.
 
+## Data-source policy
+
+Usage must come from the cheapest source that already exists, in this order:
+
+1. **Files the agent already writes** (Claude's status-line cache, Codex rollout
+   logs), watched with FSEvents rather than polled.
+2. **A direct HTTP request** to the provider's usage endpoint, using the agent's
+   existing sign-in read-only (see the Claude OAuth request below).
+
+Never launch an agent CLI (`claude`, `codex`) or scrape its TUI through a PTY to
+read usage: each launch boots a full Node/Rust runtime, loads config and plugins,
+and can start a session, which is far heavier than one HTTPS request. When a new
+provider or window needs live data, find the HTTP endpoint the CLI itself calls
+and use that. Like the Claude path, such requests must not refresh or rewrite the
+agent's credentials; the agent owns its session.
+
 ## How it works
 
 The app reads `claudeAiOauth.accessToken` (and its optional millisecond expiry)
@@ -21,6 +37,17 @@ after clicking **Allow Keychain access**, never at startup, when opening the men
 or during an ordinary retry. The explicit action reads the credential immediately;
 the subsequent usage request still honors the endpoint cooldown. Network and
 Keychain work runs off the UI thread.
+
+Claude Code writes the item with `/usr/bin/security`, and each token renewal
+resets the item's partition list to Apple tools (`apple-tool:`). That silently
+revokes an **Always Allow** granted to this app every few hours. The app
+therefore reads the item through `/usr/bin/security find-generic-password -w`,
+the same Apple tool Claude Code uses and that the item's access list already
+trusts, so no prompt appears. This is a tiny system binary rather than the agent
+CLI, and it only reads. The secret passes through a private pipe and is never
+logged. Background reads skip the tool while the login Keychain is locked,
+because the tool would then ask for a password. If the tool fails, the app falls
+back to the direct Keychain read below.
 
 The existing credential is in the legacy login Keychain. `LAContext` alone does
 not suppress that Keychain's permission UI, so reads also set
@@ -100,9 +127,15 @@ forwards the original JSON to it after updating the cache. Run the bridge with
 The popover also shows OpenAI Codex CLI usage beneath Claude, when Codex
 data is available. Codex writes a `token_count` event with a `rate_limits` object
 into `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` after each response, so no CLI
-launch or PTY scraping is needed. The app checks those logs at launch and when the
-popover opens. Unchanged files are skipped, and changed files are searched backward
-from their tails instead of being reread in full.
+launch or PTY scraping is needed. The app checks those logs at launch, when an
+FSEvents stream on the sessions tree reports writes, on a two-minute fallback
+timer, and when the popover opens. Unchanged files are skipped, and changed files
+are searched backward from their tails instead of being reread in full.
+
+Codex only logs usage after a response, so an idle snapshot outlives its windows.
+A window whose reset time has passed is shown as empty with no countdown until
+Codex reports again; the same applies to a cached Claude reading. The menu-bar
+icon redraws at the next reset and on wake.
 
 The reader is generic over Codex's `primary`/`secondary` windows and labels each by
 its `window_minutes` (5-hour ≈ 300, weekly ≈ 10080, monthly ≈ 43800), so if OpenAI
