@@ -44,9 +44,14 @@ func checkOAuthUsage() async {
         let noWeek = try ClaudeUsageSnapshot.decode(Data(#"{"five_hour":{"utilization":1e300,"resets_at":"2026-10-04T13:09:59Z"},"seven_day":null}"#.utf8))
         check(noWeek.usage(observedAt: now).sessionPercent == 100 && noWeek.weekUtilization == nil,
               "OAuth handles absent weekly data and safely clamps extreme percentages")
+        let notStarted = try ClaudeUsageSnapshot.decode(Data(#"{"five_hour":{"utilization":0.0,"resets_at":null},"seven_day":{"utilization":22.0,"resets_at":"2026-10-04T18:59:59.646860+00:00"}}"#.utf8))
+        let notStartedUsage = notStarted.usage(observedAt: now)
+        check(notStartedUsage.sessionPercent(at: now) == 0 && notStartedUsage.weekPercent(at: now) == 22
+              && notStartedUsage.nextReset(after: now) == snapshot.weekResetAt,
+              "OAuth treats a null reset as a window that has not started")
+        check(!notStarted.hasIncreased(since: snapshot), "a window that has not started is not activity")
         for invalid in [
             #"{"five_hour":{"utilization":3,"resets_at":"invalid"}}"#,
-            #"{"five_hour":{"utilization":3,"resets_at":"2026-10-04T13:09:59Z"},"seven_day":{"utilization":22,"resets_at":null}}"#,
             #"{"five_hour":null,"seven_day":null}"#,
             #"{"five_hour":{"utilization":"secret-server-body","resets_at":null}}"#,
         ] {

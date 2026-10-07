@@ -175,9 +175,11 @@ public enum ClaudeUsageError: Error, CustomStringConvertible, Sendable {
 }
 
 /// Retains fractional utilization for activity detection, even when the UI rounds it.
+/// A nil reset means the window has not started: Claude reports `resets_at: null`
+/// until the first request after the previous window elapsed.
 public struct ClaudeUsageSnapshot: Codable, Sendable {
     public let sessionUtilization: Double
-    public let sessionResetAt: Date
+    public let sessionResetAt: Date?
     public let weekUtilization: Double?
     public let weekResetAt: Date?
 
@@ -196,22 +198,21 @@ public struct ClaudeUsageSnapshot: Codable, Sendable {
         guard let window = envelope.five_hour, let percent = window.utilization else {
             throw ClaudeUsageError.noSubscriptionUsage
         }
-        guard percent.isFinite, let reset = parseDate(window.resets_at) else {
-            throw ClaudeUsageError.invalidResponse
-        }
+        let reset = try parseReset(window.resets_at)
+        guard percent.isFinite else { throw ClaudeUsageError.invalidResponse }
         let weekPercent = envelope.seven_day?.utilization
-        let weekReset = parseDate(envelope.seven_day?.resets_at)
-        if let weekPercent, !weekPercent.isFinite || weekReset == nil {
-            throw ClaudeUsageError.invalidResponse
-        }
+        let weekReset = try parseReset(envelope.seven_day?.resets_at)
+        if let weekPercent, !weekPercent.isFinite { throw ClaudeUsageError.invalidResponse }
         return Self(sessionUtilization: percent, sessionResetAt: reset,
                     weekUtilization: weekPercent, weekResetAt: weekReset)
     }
 
+    /// A window that has not started is shown like an elapsed one: empty, no countdown.
     public func usage(observedAt: Date) -> Usage {
         func percent(_ value: Double) -> Int { Int(min(max(value, 0), 100).rounded()) }
-        return Usage(sessionPercent: percent(sessionUtilization), sessionResetAt: sessionResetAt,
-                     weekPercent: weekUtilization.map(percent), weekResetAt: weekResetAt,
+        return Usage(sessionPercent: percent(sessionUtilization), sessionResetAt: sessionResetAt ?? observedAt,
+                     weekPercent: weekUtilization.map(percent),
+                     weekResetAt: weekUtilization == nil ? nil : weekResetAt ?? observedAt,
                      observedAt: observedAt)
     }
 
@@ -229,13 +230,15 @@ public struct ClaudeUsageSnapshot: Codable, Sendable {
         return sessionIncreased || weekIncreased
     }
 
-    private static func parseDate(_ value: String?) -> Date? {
+    /// Absent is valid (window not started); present but unparseable is not.
+    private static func parseReset(_ value: String?) throws -> Date? {
         guard let value else { return nil }
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         if let date = formatter.date(from: value) { return date }
         formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: value)
+        guard let date = formatter.date(from: value) else { throw ClaudeUsageError.invalidResponse }
+        return date
     }
 }
 
